@@ -40,16 +40,38 @@ class TicketType extends Model
         return max($this->quantity - $this->quantity_sold, 0);
     }
 
+    /**
+     * True if the sales window has a start date that hasn't been reached yet.
+     */
+    public function saleNotStarted(): bool
+    {
+        return $this->sales_start !== null && now()->lt($this->sales_start);
+    }
+
+    /**
+     * True if the sales window has an end date that has already passed.
+     */
+    public function saleEnded(): bool
+    {
+        return $this->sales_end !== null && now()->gt($this->sales_end);
+    }
+
+    /**
+     * True if there are no remaining tickets of this type.
+     */
+    public function isSoldOut(): bool
+    {
+        return $this->available() <= 0;
+    }
+
+    /**
+     * Overall "can this be purchased right now" check. Kept for use in the
+     * UI (disabling an option) and as a single source of truth; the
+     * booking flow uses the three checks above individually so it can
+     * show the precise reason to the user.
+     */
     public function isOnSale(): bool
     {
-        $now = now();
-        if ($this->sales_start && $now->lt($this->sales_start)) {
-            return false;
-        }
-        if ($this->sales_end && $now->gt($this->sales_end)) {
-            return false;
-        }
-
-        return $this->available() > 0;
+        return ! $this->saleNotStarted() && ! $this->saleEnded() && ! $this->isSoldOut();
     }
 }

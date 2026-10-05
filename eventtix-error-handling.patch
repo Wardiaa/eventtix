@@ -1,0 +1,686 @@
+diff --git a/eventtix/app/Exceptions/BookingException.php b/eventtix/app/Exceptions/BookingException.php
+new file mode 100644
+index 0000000..7a14ea9
+--- /dev/null
++++ b/eventtix/app/Exceptions/BookingException.php
+@@ -0,0 +1,21 @@
++<?php
++
++namespace App\Exceptions;
++
++use Exception;
++
++/**
++ * Represents an expected, user-facing business rule violation in the
++ * booking/cancellation flow (sales not started, sold out, not cancellable...).
++ *
++ * This is NOT a bug: it is thrown deliberately when a request cannot be
++ * fulfilled for a reason the user can understand and act on. It is caught
++ * by the renderable registered in bootstrap/app.php and turned into a
++ * normal redirect-back with a flash error message, instead of an
++ * exception page. Genuine unexpected errors must keep using regular
++ * exceptions so they are logged and surfaced as a 500 page.
++ */
++class BookingException extends Exception
++{
++    //
++}
+diff --git a/eventtix/app/Http/Controllers/BookingController.php b/eventtix/app/Http/Controllers/BookingController.php
+index daf3520..04b993e 100644
+--- a/eventtix/app/Http/Controllers/BookingController.php
++++ b/eventtix/app/Http/Controllers/BookingController.php
+@@ -2,6 +2,7 @@
+ 
+ namespace App\Http\Controllers;
+ 
++use App\Exceptions\BookingException;
+ use App\Http\Requests\StoreBookingRequest;
+ use App\Models\Booking;
+ use App\Models\Event;
+@@ -9,6 +10,7 @@
+ use App\Models\TicketType;
+ use App\Notifications\BookingConfirmed;
+ use Illuminate\Support\Facades\DB;
++use Illuminate\Support\Facades\Log;
+ 
+ class BookingController extends Controller
+ {
+@@ -24,20 +26,53 @@ public function index()
+ 
+     public function store(StoreBookingRequest $request, Event $event)
+     {
++        // Guard against booking an event reached through a stale/old URL
++        // (cancelled, unpublished, completed...). This is a normal,
++        // expected situation, not a bug, so it's a BookingException
++        // rather than abort(): see bootstrap/app.php for how it's
++        // rendered as a friendly redirect instead of an exception page.
++        if ($event->status !== 'published') {
++            throw new BookingException("Cet événement n'est plus disponible à la réservation.");
++        }
++
+         $data = $request->validated();
+ 
+         $booking = DB::transaction(function () use ($data, $event, $request) {
+-            // lock the ticket type row to prevent overselling under concurrent bookings
++            // Lock the ticket type row to prevent overselling under
++            // concurrent bookings. firstOrFail() here is a last-resort
++            // safety net (StoreBookingRequest already validates that the
++            // ticket type belongs to this event) — if it somehow still
++            // fails, it becomes a normal 404 via the custom error page.
+             $ticketType = TicketType::where('id', $data['ticket_type_id'])
+                 ->where('event_id', $event->id)
+                 ->lockForUpdate()
+                 ->firstOrFail();
+ 
+-            abort_unless($ticketType->isOnSale(), 422, 'Ce type de billet n\'est plus disponible.');
++            // Each case below throws inside the transaction, which rolls
++            // back automatically — nothing has been written yet at this
++            // point, so this is safe. The three checks are evaluated
++            // separately (rather than via the combined isOnSale()) so the
++            // user is told exactly why, instead of a generic message.
++            if ($ticketType->saleNotStarted()) {
++                throw new BookingException("La vente de ce billet n'a pas encore commencé.");
++            }
++
++            if ($ticketType->saleEnded()) {
++                throw new BookingException('La vente de ce billet est terminée.');
++            }
++
++            if ($ticketType->isSoldOut()) {
++                throw new BookingException('Ce type de billet est complet.');
++            }
+ 
+             $quantity = (int) $data['quantity'];
++            $available = $ticketType->available();
+ 
+-            abort_if($ticketType->available() < $quantity, 422, 'Il ne reste pas assez de places disponibles.');
++            if ($available < $quantity) {
++                throw new BookingException(
++                    "Il ne reste que {$available} billet(s) disponible(s) pour ce type de billet."
++                );
++            }
+ 
+             $ticketType->increment('quantity_sold', $quantity);
+ 
+@@ -58,7 +93,20 @@ public function store(StoreBookingRequest $request, Event $event)
+             return $booking;
+         });
+ 
+-        $booking->user->notify(new BookingConfirmed($booking));
++        // The booking has already been committed to the database at this
++        // point. A failure to send the confirmation email is an
++        // infrastructure problem, not a reason to tell the user their
++        // booking failed (which could make them submit the form again and
++        // create a duplicate booking). So we log it and continue.
++        try {
++            $booking->user->notify(new BookingConfirmed($booking));
++        } catch (\Throwable $e) {
++            Log::error('Échec de l\'envoi de la notification de confirmation de réservation.', [
++                'booking_id' => $booking->id,
++                'user_id' => $booking->user_id,
++                'exception' => $e->getMessage(),
++            ]);
++        }
+ 
+         return redirect()->route('bookings.show', $booking)
+             ->with('success', 'Réservation confirmée ! Vos billets et QR codes sont prêts ci-dessous.');
+@@ -77,7 +125,11 @@ public function cancel(Booking $booking)
+     {
+         $this->authorize('cancel', $booking);
+ 
+-        abort_unless($booking->isCancellable(), 422, 'Cette réservation ne peut plus être annulée.');
++        // Checked before the transaction starts, so nothing is written to
++        // the database when cancellation is rejected.
++        if (! $booking->isCancellable()) {
++            throw new BookingException('Cette réservation ne peut plus être annulée.');
++        }
+ 
+         DB::transaction(function () use ($booking) {
+             $booking->ticketType()->decrement('quantity_sold', $booking->quantity);
+diff --git a/eventtix/app/Http/Requests/StoreBookingRequest.php b/eventtix/app/Http/Requests/StoreBookingRequest.php
+index 20364ef..e03d9e1 100644
+--- a/eventtix/app/Http/Requests/StoreBookingRequest.php
++++ b/eventtix/app/Http/Requests/StoreBookingRequest.php
+@@ -3,6 +3,7 @@
+ namespace App\Http\Requests;
+ 
+ use Illuminate\Foundation\Http\FormRequest;
++use Illuminate\Validation\Rule;
+ 
+ class StoreBookingRequest extends FormRequest
+ {
+@@ -13,9 +14,35 @@ public function authorize(): bool
+ 
+     public function rules(): array
+     {
++        // $this->route('event') is the Event resolved by route model
++        // binding on /events/{event:slug}/book — used to scope the ticket
++        // type check so a ticket type from another event is rejected here,
++        // as a normal validation error, instead of failing later with a
++        // raw 404/exception.
++        $event = $this->route('event');
++
+         return [
+-            'ticket_type_id' => ['required', 'exists:ticket_types,id'],
++            'ticket_type_id' => [
++                'required',
++                'integer',
++                Rule::exists('ticket_types', 'id')->where(
++                    fn ($query) => $query->where('event_id', $event?->id)
++                ),
++            ],
+             'quantity' => ['required', 'integer', 'min:1', 'max:10'],
+         ];
+     }
++
++    public function messages(): array
++    {
++        return [
++            'ticket_type_id.required' => 'Merci de sélectionner un type de billet.',
++            'ticket_type_id.integer' => 'Type de billet invalide.',
++            'ticket_type_id.exists' => "Ce type de billet n'est pas disponible pour cet événement.",
++            'quantity.required' => "Merci d'indiquer une quantité de billets.",
++            'quantity.integer' => 'La quantité doit être un nombre entier.',
++            'quantity.min' => 'La quantité minimale est de 1 billet.',
++            'quantity.max' => 'Vous ne pouvez pas réserver plus de 10 billets à la fois.',
++        ];
++    }
+ }
+diff --git a/eventtix/app/Models/TicketType.php b/eventtix/app/Models/TicketType.php
+index 278c79a..785fc4d 100644
+--- a/eventtix/app/Models/TicketType.php
++++ b/eventtix/app/Models/TicketType.php
+@@ -40,16 +40,38 @@ public function available(): int
+         return max($this->quantity - $this->quantity_sold, 0);
+     }
+ 
+-    public function isOnSale(): bool
++    /**
++     * True if the sales window has a start date that hasn't been reached yet.
++     */
++    public function saleNotStarted(): bool
++    {
++        return $this->sales_start !== null && now()->lt($this->sales_start);
++    }
++
++    /**
++     * True if the sales window has an end date that has already passed.
++     */
++    public function saleEnded(): bool
++    {
++        return $this->sales_end !== null && now()->gt($this->sales_end);
++    }
++
++    /**
++     * True if there are no remaining tickets of this type.
++     */
++    public function isSoldOut(): bool
+     {
+-        $now = now();
+-        if ($this->sales_start && $now->lt($this->sales_start)) {
+-            return false;
+-        }
+-        if ($this->sales_end && $now->gt($this->sales_end)) {
+-            return false;
+-        }
++        return $this->available() <= 0;
++    }
+ 
+-        return $this->available() > 0;
++    /**
++     * Overall "can this be purchased right now" check. Kept for use in the
++     * UI (disabling an option) and as a single source of truth; the
++     * booking flow uses the three checks above individually so it can
++     * show the precise reason to the user.
++     */
++    public function isOnSale(): bool
++    {
++        return ! $this->saleNotStarted() && ! $this->saleEnded() && ! $this->isSoldOut();
+     }
+ }
+diff --git a/eventtix/bootstrap/app.php b/eventtix/bootstrap/app.php
+index 4863f45..08467b6 100644
+--- a/eventtix/bootstrap/app.php
++++ b/eventtix/bootstrap/app.php
+@@ -1,5 +1,6 @@
+ <?php
+ 
++use App\Exceptions\BookingException;
+ use App\Http\Middleware\EnsureUserHasRole;
+ use Illuminate\Foundation\Application;
+ use Illuminate\Foundation\Configuration\Exceptions;
+@@ -17,5 +18,19 @@
+         ]);
+     })
+     ->withExceptions(function (Exceptions $exceptions) {
+-        //
++        // Expected business-rule failures (sales not started, sold out,
++        // not cancellable...) become a normal redirect back with a flash
++        // error message instead of an exception page. This runs before
++        // the default debug/Ignition handling, so it applies even with
++        // APP_DEBUG=true locally.
++        $exceptions->render(function (BookingException $e, $request) {
++            return redirect()->back()
++                ->withInput()
++                ->with('error', $e->getMessage());
++        });
++
++        // Everything else keeps Laravel's normal behaviour: genuinely
++        // unexpected exceptions are still logged (see config/logging.php)
++        // and, once APP_DEBUG=false, are shown through the custom
++        // resources/views/errors/500.blade.php page automatically.
+     })->create();
+diff --git a/eventtix/resources/views/errors/403.blade.php b/eventtix/resources/views/errors/403.blade.php
+new file mode 100644
+index 0000000..f9ce9fe
+--- /dev/null
++++ b/eventtix/resources/views/errors/403.blade.php
+@@ -0,0 +1,21 @@
++@extends('layouts.app')
++@section('title', 'Accès refusé')
++@section('content')
++<div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
++    <p class="text-6xl font-extrabold text-brand-300">403</p>
++    <h1 class="mt-4 text-2xl font-bold text-gray-900">Accès refusé</h1>
++    <p class="mt-2 text-gray-500">
++        {{ $exception->getMessage() && $exception->getMessage() !== 'This action is unauthorized.' ? $exception->getMessage() : "Vous n'avez pas l'autorisation d'accéder à cette page ou d'effectuer cette action." }}
++    </p>
++    <div class="mt-8 flex flex-wrap justify-center gap-3">
++        <a href="{{ route('home') }}" class="bg-brand-500 hover:bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-xl transition">
++            Retour à l'accueil
++        </a>
++        @auth
++            <a href="{{ route('events.index') }}" class="bg-brand-50 text-brand-700 hover:bg-brand-100 font-semibold px-5 py-2.5 rounded-xl transition">
++                Voir les événements
++            </a>
++        @endauth
++    </div>
++</div>
++@endsection
+diff --git a/eventtix/resources/views/errors/404.blade.php b/eventtix/resources/views/errors/404.blade.php
+new file mode 100644
+index 0000000..0f7e4fe
+--- /dev/null
++++ b/eventtix/resources/views/errors/404.blade.php
+@@ -0,0 +1,20 @@
++@extends('layouts.app')
++@section('title', 'Page introuvable')
++@section('content')
++<div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
++    <p class="text-6xl font-extrabold text-brand-300">404</p>
++    <h1 class="mt-4 text-2xl font-bold text-gray-900">Page introuvable</h1>
++    <p class="mt-2 text-gray-500">
++        La page, l'événement ou la réservation que vous cherchez n'existe pas, a été supprimé(e),
++        ou l'adresse est incorrecte.
++    </p>
++    <div class="mt-8 flex flex-wrap justify-center gap-3">
++        <a href="{{ route('home') }}" class="bg-brand-500 hover:bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-xl transition">
++            Retour à l'accueil
++        </a>
++        <a href="{{ route('events.index') }}" class="bg-brand-50 text-brand-700 hover:bg-brand-100 font-semibold px-5 py-2.5 rounded-xl transition">
++            Voir les événements
++        </a>
++    </div>
++</div>
++@endsection
+diff --git a/eventtix/resources/views/errors/500.blade.php b/eventtix/resources/views/errors/500.blade.php
+new file mode 100644
+index 0000000..4f3523c
+--- /dev/null
++++ b/eventtix/resources/views/errors/500.blade.php
+@@ -0,0 +1,17 @@
++@extends('layouts.app')
++@section('title', 'Erreur serveur')
++@section('content')
++<div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
++    <p class="text-6xl font-extrabold text-brand-300">500</p>
++    <h1 class="mt-4 text-2xl font-bold text-gray-900">Une erreur inattendue est survenue</h1>
++    <p class="mt-2 text-gray-500">
++        Quelque chose s'est mal passé de notre côté. L'équipe technique a été notifiée.
++        Merci de réessayer dans quelques instants.
++    </p>
++    <div class="mt-8 flex flex-wrap justify-center gap-3">
++        <a href="{{ route('home') }}" class="bg-brand-500 hover:bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-xl transition">
++            Retour à l'accueil
++        </a>
++    </div>
++</div>
++@endsection
+diff --git a/eventtix/resources/views/events/show.blade.php b/eventtix/resources/views/events/show.blade.php
+index 4505f11..9641608 100644
+--- a/eventtix/resources/views/events/show.blade.php
++++ b/eventtix/resources/views/events/show.blade.php
+@@ -47,21 +47,35 @@
+             @if($event->ticketTypes->isEmpty())
+                 <p class="text-sm text-gray-400">Aucun billet disponible pour cet événement.</p>
+             @else
+-                <form method="POST" action="{{ route('bookings.store', $event) }}" x-data="{ selected: null, price: 0, qty: 1 }">
++                <form method="POST" action="{{ route('bookings.store', $event) }}" x-data="{ selected: {{ old('ticket_type_id', $event->ticketTypes->first()->id) }}, price: {{ old('ticket_type_id') ? $event->ticketTypes->firstWhere('id', (int) old('ticket_type_id'))?->price ?? 0 : $event->ticketTypes->first()->price }}, qty: {{ (int) old('quantity', 1) }} }">
+                     @csrf
++
++                    @error('ticket_type_id')
++                        <p class="text-xs font-semibold text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">{{ $message }}</p>
++                    @enderror
++
+                     <div class="space-y-3">
+                         @foreach($event->ticketTypes as $tt)
++                            @php $isChecked = old('ticket_type_id') ? (int) old('ticket_type_id') === $tt->id : $loop->first; @endphp
+                             <label class="block border rounded-xl p-4 cursor-pointer transition {{ $tt->isOnSale() ? 'hover:border-brand-400' : 'opacity-50 pointer-events-none' }}"
+                                    :class="selected == {{ $tt->id }} ? 'border-brand-500 ring-2 ring-brand-100' : 'border-gray-200'">
+                                 <input type="radio" name="ticket_type_id" value="{{ $tt->id }}" class="hidden"
+-                                       @change="selected = {{ $tt->id }}; price = {{ $tt->price }}" @if($loop->first) checked @endif>
++                                       @change="selected = {{ $tt->id }}; price = {{ $tt->price }}" @if($isChecked) checked @endif>
+                                 <div class="flex items-center justify-between">
+                                     <div>
+                                         <p class="font-semibold text-gray-900">{{ $tt->name }}</p>
+                                         @if($tt->description)
+                                             <p class="text-xs text-gray-400">{{ $tt->description }}</p>
+                                         @endif
+-                                        <p class="text-xs text-gray-400 mt-1">{{ $tt->available() }} place(s) restante(s)</p>
++                                        @if($tt->saleNotStarted())
++                                            <p class="text-xs text-amber-500 font-semibold mt-1">Vente pas encore ouverte</p>
++                                        @elseif($tt->saleEnded())
++                                            <p class="text-xs text-red-400 font-semibold mt-1">Vente terminée</p>
++                                        @elseif($tt->isSoldOut())
++                                            <p class="text-xs text-red-400 font-semibold mt-1">Complet</p>
++                                        @else
++                                            <p class="text-xs text-gray-400 mt-1">{{ $tt->available() }} place(s) restante(s)</p>
++                                        @endif
+                                     </div>
+                                     <p class="font-bold text-brand-600">{{ $tt->price > 0 ? number_format($tt->price, 0, ',', ' ').' DA' : 'Gratuit' }}</p>
+                                 </div>
+@@ -73,6 +87,9 @@
+                         <label class="text-sm font-medium text-gray-600">Quantité</label>
+                         <input type="number" name="quantity" x-model="qty" min="1" max="10" class="w-20 rounded-lg border-gray-200 text-sm text-center focus:ring-brand-500 focus:border-brand-500">
+                     </div>
++                    @error('quantity')
++                        <p class="text-xs font-semibold text-red-500 mt-1">{{ $message }}</p>
++                    @enderror
+ 
+                     <div class="mt-4 flex items-center justify-between border-t pt-4">
+                         <span class="text-sm text-gray-500">Total</span>
+diff --git a/eventtix/tests/Feature/BookingTest.php b/eventtix/tests/Feature/BookingTest.php
+new file mode 100644
+index 0000000..1a1b9ad
+--- /dev/null
++++ b/eventtix/tests/Feature/BookingTest.php
+@@ -0,0 +1,279 @@
++<?php
++
++namespace Tests\Feature;
++
++use App\Models\Booking;
++use App\Models\Event;
++use App\Models\TicketType;
++use App\Models\User;
++use Illuminate\Foundation\Testing\RefreshDatabase;
++use Illuminate\Support\Facades\Notification;
++use Tests\TestCase;
++
++class BookingTest extends TestCase
++{
++    use RefreshDatabase;
++
++    protected function makeEvent(array $attrs = []): Event
++    {
++        $organizer = User::create([
++            'name' => 'Organizer',
++            'email' => 'organizer+'.uniqid().'@test.local',
++            'password' => bcrypt('password'),
++            'role' => 'organizer',
++        ]);
++
++        return Event::create(array_merge([
++            'organizer_id' => $organizer->id,
++            'title' => 'Tech Conference',
++            'description' => 'A great conference.',
++            'category' => 'Technologie',
++            'location' => 'Alger',
++            'start_date' => now()->addDays(10),
++            'end_date' => now()->addDays(10)->addHours(5),
++            'capacity' => 100,
++            'status' => 'published',
++        ], $attrs));
++    }
++
++    protected function makeTicketType(Event $event, array $attrs = []): TicketType
++    {
++        return TicketType::create(array_merge([
++            'event_id' => $event->id,
++            'name' => 'Standard',
++            'price' => 1000,
++            'quantity' => 10,
++            'quantity_sold' => 0,
++        ], $attrs));
++    }
++
++    protected function makeUser(): User
++    {
++        return User::create([
++            'name' => 'Amel',
++            'email' => 'user+'.uniqid().'@test.local',
++            'password' => bcrypt('password'),
++            'role' => 'user',
++        ]);
++    }
++
++    public function test_user_can_book_an_available_ticket(): void
++    {
++        Notification::fake();
++
++        $event = $this->makeEvent();
++        $ticketType = $this->makeTicketType($event);
++        $user = $this->makeUser();
++
++        $response = $this->actingAs($user)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 2,
++        ]);
++
++        $booking = Booking::first();
++
++        $response->assertRedirect(route('bookings.show', $booking));
++        $response->assertSessionHas('success');
++        $this->assertDatabaseHas('bookings', ['event_id' => $event->id, 'quantity' => 2, 'status' => 'confirmed']);
++        $this->assertEquals(2, $ticketType->fresh()->quantity_sold);
++        $this->assertCount(2, $booking->tickets);
++    }
++
++    public function test_booking_fails_with_friendly_message_when_sales_not_started(): void
++    {
++        $event = $this->makeEvent();
++        $ticketType = $this->makeTicketType($event, ['sales_start' => now()->addDay()]);
++        $user = $this->makeUser();
++
++        $response = $this->actingAs($user)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 1,
++        ]);
++
++        $response->assertRedirect();
++        $response->assertSessionHas('error', "La vente de ce billet n'a pas encore commencé.");
++        $this->assertDatabaseCount('bookings', 0);
++        $this->assertEquals(0, $ticketType->fresh()->quantity_sold);
++    }
++
++    public function test_booking_fails_with_friendly_message_when_sales_ended(): void
++    {
++        $event = $this->makeEvent();
++        $ticketType = $this->makeTicketType($event, ['sales_end' => now()->subDay()]);
++        $user = $this->makeUser();
++
++        $response = $this->actingAs($user)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 1,
++        ]);
++
++        $response->assertSessionHas('error', 'La vente de ce billet est terminée.');
++        $this->assertDatabaseCount('bookings', 0);
++    }
++
++    public function test_booking_fails_with_friendly_message_when_sold_out(): void
++    {
++        $event = $this->makeEvent();
++        $ticketType = $this->makeTicketType($event, ['quantity' => 5, 'quantity_sold' => 5]);
++        $user = $this->makeUser();
++
++        $response = $this->actingAs($user)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 1,
++        ]);
++
++        $response->assertSessionHas('error', 'Ce type de billet est complet.');
++        $this->assertDatabaseCount('bookings', 0);
++    }
++
++    public function test_booking_fails_with_friendly_message_when_quantity_exceeds_availability(): void
++    {
++        $event = $this->makeEvent();
++        $ticketType = $this->makeTicketType($event, ['quantity' => 5, 'quantity_sold' => 2]); // 3 available
++        $user = $this->makeUser();
++
++        $response = $this->actingAs($user)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 5,
++        ]);
++
++        $response->assertSessionHas('error', 'Il ne reste que 3 billet(s) disponible(s) pour ce type de billet.');
++        $this->assertDatabaseCount('bookings', 0);
++        $this->assertEquals(2, $ticketType->fresh()->quantity_sold);
++    }
++
++    public function test_booking_is_rejected_as_validation_error_when_quantity_is_invalid(): void
++    {
++        $event = $this->makeEvent();
++        $ticketType = $this->makeTicketType($event);
++        $user = $this->makeUser();
++
++        $response = $this->actingAs($user)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 0,
++        ]);
++
++        $response->assertSessionHasErrors('quantity');
++        $this->assertDatabaseCount('bookings', 0);
++    }
++
++    public function test_booking_is_rejected_when_ticket_type_belongs_to_another_event(): void
++    {
++        $eventA = $this->makeEvent(['title' => 'Event A']);
++        $eventB = $this->makeEvent(['title' => 'Event B']);
++        $ticketTypeOfB = $this->makeTicketType($eventB);
++        $user = $this->makeUser();
++
++        $response = $this->actingAs($user)->post(route('bookings.store', $eventA), [
++            'ticket_type_id' => $ticketTypeOfB->id,
++            'quantity' => 1,
++        ]);
++
++        $response->assertSessionHasErrors('ticket_type_id');
++        $this->assertDatabaseCount('bookings', 0);
++    }
++
++    public function test_booking_is_rejected_for_a_cancelled_event(): void
++    {
++        $event = $this->makeEvent(['status' => 'cancelled']);
++        $ticketType = $this->makeTicketType($event);
++        $user = $this->makeUser();
++
++        $response = $this->actingAs($user)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 1,
++        ]);
++
++        $response->assertSessionHas('error', "Cet événement n'est plus disponible à la réservation.");
++        $this->assertDatabaseCount('bookings', 0);
++    }
++
++    public function test_booking_succeeds_even_when_notification_fails(): void
++    {
++        $event = $this->makeEvent();
++        $ticketType = $this->makeTicketType($event);
++        $user = $this->makeUser();
++
++        // Simulate a transport-level failure (e.g. SMTP host unreachable)
++        // without needing a real mail server.
++        Notification::shouldReceive('send')->once()->andThrow(new \RuntimeException('Connection could not be established with host "mailpit:1025"'));
++
++        $response = $this->actingAs($user)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 1,
++        ]);
++
++        $booking = Booking::first();
++
++        $response->assertRedirect(route('bookings.show', $booking));
++        $response->assertSessionHas('success');
++        $this->assertDatabaseHas('bookings', ['id' => $booking->id, 'status' => 'confirmed']);
++    }
++
++    public function test_user_cannot_view_another_users_booking(): void
++    {
++        $event = $this->makeEvent();
++        $ticketType = $this->makeTicketType($event);
++        $owner = $this->makeUser();
++        $stranger = $this->makeUser();
++
++        Notification::fake();
++        $this->actingAs($owner)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 1,
++        ]);
++        $booking = Booking::first();
++
++        $response = $this->actingAs($stranger)->get(route('bookings.show', $booking));
++
++        $response->assertStatus(403);
++    }
++
++    public function test_nonexistent_event_returns_404(): void
++    {
++        $response = $this->get('/events/this-slug-does-not-exist');
++
++        $response->assertStatus(404);
++    }
++
++    public function test_cancellation_restores_availability_and_succeeds(): void
++    {
++        Notification::fake();
++        $event = $this->makeEvent();
++        $ticketType = $this->makeTicketType($event);
++        $user = $this->makeUser();
++
++        $this->actingAs($user)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 2,
++        ]);
++        $booking = Booking::first();
++        $this->assertEquals(2, $ticketType->fresh()->quantity_sold);
++
++        $response = $this->actingAs($user)->post(route('bookings.cancel', $booking));
++
++        $response->assertSessionHas('success');
++        $this->assertEquals('cancelled', $booking->fresh()->status);
++        $this->assertEquals(0, $ticketType->fresh()->quantity_sold);
++    }
++
++    public function test_cancellation_is_rejected_with_friendly_message_when_event_already_started(): void
++    {
++        Notification::fake();
++        $event = $this->makeEvent(['start_date' => now()->subDay(), 'end_date' => now()->addDay()]);
++        $ticketType = $this->makeTicketType($event);
++        $user = $this->makeUser();
++
++        $this->actingAs($user)->post(route('bookings.store', $event), [
++            'ticket_type_id' => $ticketType->id,
++            'quantity' => 1,
++        ]);
++        $booking = Booking::first();
++
++        $response = $this->actingAs($user)->post(route('bookings.cancel', $booking));
++
++        $response->assertSessionHas('error', 'Cette réservation ne peut plus être annulée.');
++        $this->assertEquals('confirmed', $booking->fresh()->status);
++        $this->assertEquals(1, $ticketType->fresh()->quantity_sold);
++    }
++}

@@ -47,21 +47,35 @@
             @if($event->ticketTypes->isEmpty())
                 <p class="text-sm text-gray-400">Aucun billet disponible pour cet événement.</p>
             @else
-                <form method="POST" action="{{ route('bookings.store', $event) }}" x-data="{ selected: null, price: 0, qty: 1 }">
+                <form method="POST" action="{{ route('bookings.store', $event) }}" x-data="{ selected: {{ old('ticket_type_id', $event->ticketTypes->first()->id) }}, price: {{ old('ticket_type_id') ? $event->ticketTypes->firstWhere('id', (int) old('ticket_type_id'))?->price ?? 0 : $event->ticketTypes->first()->price }}, qty: {{ (int) old('quantity', 1) }} }">
                     @csrf
+
+                    @error('ticket_type_id')
+                        <p class="text-xs font-semibold text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">{{ $message }}</p>
+                    @enderror
+
                     <div class="space-y-3">
                         @foreach($event->ticketTypes as $tt)
+                            @php $isChecked = old('ticket_type_id') ? (int) old('ticket_type_id') === $tt->id : $loop->first; @endphp
                             <label class="block border rounded-xl p-4 cursor-pointer transition {{ $tt->isOnSale() ? 'hover:border-brand-400' : 'opacity-50 pointer-events-none' }}"
                                    :class="selected == {{ $tt->id }} ? 'border-brand-500 ring-2 ring-brand-100' : 'border-gray-200'">
                                 <input type="radio" name="ticket_type_id" value="{{ $tt->id }}" class="hidden"
-                                       @change="selected = {{ $tt->id }}; price = {{ $tt->price }}" @if($loop->first) checked @endif>
+                                       @change="selected = {{ $tt->id }}; price = {{ $tt->price }}" @if($isChecked) checked @endif>
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <p class="font-semibold text-gray-900">{{ $tt->name }}</p>
                                         @if($tt->description)
                                             <p class="text-xs text-gray-400">{{ $tt->description }}</p>
                                         @endif
-                                        <p class="text-xs text-gray-400 mt-1">{{ $tt->available() }} place(s) restante(s)</p>
+                                        @if($tt->saleNotStarted())
+                                            <p class="text-xs text-amber-500 font-semibold mt-1">Vente pas encore ouverte</p>
+                                        @elseif($tt->saleEnded())
+                                            <p class="text-xs text-red-400 font-semibold mt-1">Vente terminée</p>
+                                        @elseif($tt->isSoldOut())
+                                            <p class="text-xs text-red-400 font-semibold mt-1">Complet</p>
+                                        @else
+                                            <p class="text-xs text-gray-400 mt-1">{{ $tt->available() }} place(s) restante(s)</p>
+                                        @endif
                                     </div>
                                     <p class="font-bold text-brand-600">{{ $tt->price > 0 ? number_format($tt->price, 0, ',', ' ').' DA' : 'Gratuit' }}</p>
                                 </div>
@@ -73,6 +87,9 @@
                         <label class="text-sm font-medium text-gray-600">Quantité</label>
                         <input type="number" name="quantity" x-model="qty" min="1" max="10" class="w-20 rounded-lg border-gray-200 text-sm text-center focus:ring-brand-500 focus:border-brand-500">
                     </div>
+                    @error('quantity')
+                        <p class="text-xs font-semibold text-red-500 mt-1">{{ $message }}</p>
+                    @enderror
 
                     <div class="mt-4 flex items-center justify-between border-t pt-4">
                         <span class="text-sm text-gray-500">Total</span>
