@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd eventtix && git rev-parse --show-toplevel && ls .. && echo --- && ls resources/views/layouts resources/views/components resources/views/partials)",
+      "Bash(find resources/views -name \"*.blade.php\" | sort && echo --- && cat routes/web.php | head -120)",
+      "Bash(php artisan route:list --columns=method,uri,name 2>/dev/null | grep -i \"ticket-type\\\\|organizer\" | head -20)",
+      "Bash(H=$\\(curl -s http://127.0.0.1:8010/\\); echo \"$H\" | grep -c \"Trouvez votre prochain\"; echo \"$H\" | grep -c \"w-\\\\[272px\\\\]\"; echo \"$H\" | grep -ci \"fatal error\\\\|exception\\\\|Undefined\"; O=$\\(curl -s -b /tmp/cj_organizer.txt http://127.0.0.1:8010/organizer/dashboard\\); echo \"$O\" | grep -c \"Pilotez vos événements\"; echo \"$O\" | grep -ci \"fatal error\\\\|exception\\\\|Undefined\")"
+    ]
+  }
+}

@@ -1,45 +1,75 @@
 @extends('layouts.app')
+
 @section('title', 'Mes événements')
+
 @section('content')
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-    <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">Mes événements</h1>
-        <a href="{{ route('organizer.events.create') }}" class="bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition">+ Nouvel événement</a>
+<div class="pb-8">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+            <p class="eyebrow">Studio organisateur</p>
+            <h1 class="page-title mt-3">Mes événements.</h1>
+            <p class="page-subtitle">Créez, publiez et suivez les performances de vos dates.</p>
+        </div>
+        <a href="{{ route('organizer.events.create') }}" class="btn-dark">
+            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Nouvel événement
+        </a>
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50 text-gray-400 text-xs uppercase">
-                <tr>
-                    <th class="text-left px-5 py-3">Titre</th>
-                    <th class="text-left px-5 py-3">Date</th>
-                    <th class="text-left px-5 py-3">Statut</th>
-                    <th class="text-left px-5 py-3">Réservations</th>
-                    <th class="px-5 py-3"></th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-50">
-                @forelse($events as $event)
+    <div class="card mt-10 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="border-b border-stone-100 bg-cream/60">
                     <tr>
-                        <td class="px-5 py-3 font-medium text-gray-800">{{ $event->title }}</td>
-                        <td class="px-5 py-3 text-gray-500">{{ $event->start_date->format('d/m/Y H:i') }}</td>
-                        <td class="px-5 py-3">
-                            <span class="text-xs font-semibold px-2 py-1 rounded-full
-                                {{ $event->status === 'published' ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-500' }}">
-                                {{ ucfirst($event->status) }}
-                            </span>
-                        </td>
-                        <td class="px-5 py-3 text-gray-500">{{ $event->bookings_count }}</td>
-                        <td class="px-5 py-3 text-right">
-                            <a href="{{ route('organizer.events.show', $event) }}" class="text-brand-600 font-semibold hover:underline">Gérer</a>
-                        </td>
+                        <th class="table-th">Titre</th>
+                        <th class="table-th">Date</th>
+                        <th class="table-th">Statut</th>
+                        <th class="table-th text-right">Réservations</th>
+                        <th class="table-th"></th>
                     </tr>
-                @empty
-                    <tr><td colspan="5" class="px-5 py-8 text-center text-gray-400">Aucun événement créé.</td></tr>
-                @endforelse
-            </tbody>
-        </table>
+                </thead>
+                <tbody class="divide-y divide-stone-100">
+                    @forelse($events as $event)
+                        <tr class="transition-colors hover:bg-cream/60">
+                            <td class="px-5 py-4">
+                                <a href="{{ route('organizer.events.show', $event) }}" class="font-semibold text-ink transition-colors hover:text-coral-600">
+                                    {{ $event->title }}
+                                </a>
+                                <p class="mt-0.5 text-xs text-stone-400">{{ $event->category }} · {{ $event->location }}</p>
+                            </td>
+                            <td class="px-5 py-4 text-stone-500 tnum">{{ $event->start_date->format('d/m/Y H:i') }}</td>
+                            <td class="px-5 py-4">
+                                <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold
+                                    {{ $event->status === 'published' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-500' }}">
+                                    <span class="h-1.5 w-1.5 rounded-full {{ $event->status === 'published' ? 'bg-emerald-500' : 'bg-stone-400' }}"></span>
+                                    {{ ucfirst($event->status) }}
+                                </span>
+                            </td>
+                            <td class="px-5 py-4 text-right font-semibold text-ink tnum">{{ $event->bookings_count }}</td>
+                            <td class="px-5 py-4 text-right">
+                                <a href="{{ route('organizer.events.show', $event) }}" class="inline-flex items-center gap-1 text-xs font-semibold text-coral-600 transition-colors hover:text-coral-500">
+                                    Gérer
+                                    <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 17 17 7m0 0H8m9 0v9" />
+                                    </svg>
+                                </a>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5" class="px-5 py-12 text-center">
+                                <p class="text-sm font-semibold text-ink">Aucun événement créé.</p>
+                                <p class="mt-1 text-xs text-stone-400">Lancez votre première date en quelques minutes.</p>
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
     </div>
-    <div class="mt-6">{{ $events->links() }}</div>
+
+    <div class="mt-10">{{ $events->links() }}</div>
 </div>
 @endsection

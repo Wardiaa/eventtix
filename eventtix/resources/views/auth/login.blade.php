@@ -1,42 +1,47 @@
 @extends('layouts.app')
-@section('title', 'Connexion')
-@section('content')
-<div class="max-w-md mx-auto px-4 py-16">
-    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
-        <h1 class="text-2xl font-bold text-gray-900 mb-1">Bon retour parmi nous</h1>
-        <p class="text-sm text-gray-400 mb-6">Connectez-vous pour réserver vos billets.</p>
 
+@section('title', 'Connexion')
+
+@section('content')
+<div class="mx-auto max-w-md py-6 sm:py-12">
+    <p class="eyebrow">Connexion</p>
+    <h1 class="page-title mt-3">Bon retour.</h1>
+    <p class="page-subtitle">Connectez-vous pour réserver vos billets et gérer vos événements.</p>
+
+    <div class="card mt-8 p-6 sm:p-8">
         @if($errors->any())
-            <div class="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3 mb-4">
+            <div class="mb-6 rounded-2xl border border-red-200/70 bg-red-50/90 p-4 text-sm text-red-900">
                 {{ $errors->first() }}
             </div>
         @endif
 
-        <form method="POST" action="{{ route('login') }}" class="space-y-4">
+        <form method="POST" action="{{ route('login') }}" class="space-y-5">
             @csrf
             <div>
-                <label class="text-sm font-medium text-gray-700">Email</label>
-                <input type="email" name="email" value="{{ old('email') }}" required autofocus class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">
+                <label class="label-micro !text-stone-500" for="login-email">Email</label>
+                <input id="login-email" type="email" name="email" value="{{ old('email') }}" required autofocus class="input" placeholder="vous@email.com">
             </div>
             <div>
-                <label class="text-sm font-medium text-gray-700">Mot de passe</label>
-                <input type="password" name="password" required class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">
+                <label class="label-micro !text-stone-500" for="login-password">Mot de passe</label>
+                <input id="login-password" type="password" name="password" required class="input" placeholder="••••••••">
             </div>
-            <label class="flex items-center gap-2 text-sm text-gray-500">
-                <input type="checkbox" name="remember" class="rounded border-gray-300 text-brand-500 focus:ring-brand-500">
+            <label class="flex cursor-pointer items-center gap-2.5 text-sm text-stone-500">
+                <input type="checkbox" name="remember" class="h-4 w-4 cursor-pointer rounded border-stone-300 accent-ink">
                 Se souvenir de moi
             </label>
-            <button class="w-full bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3 rounded-xl transition">Se connecter</button>
+            <button type="submit" class="btn-dark w-full !py-3.5">Se connecter</button>
         </form>
 
-        <p class="mt-6 text-sm text-center text-gray-500">
-            Pas encore de compte ? <a href="{{ route('register') }}" class="text-brand-600 font-semibold">Inscrivez-vous</a>
+        <p class="mt-6 text-center text-sm text-stone-500">
+            Pas encore de compte ?
+            <a href="{{ route('register') }}" class="font-semibold text-coral-600 transition-colors hover:text-coral-500">Inscrivez-vous</a>
         </p>
+    </div>
 
-        <div class="mt-6 border-t pt-4 text-xs text-gray-400">
-            <p class="font-semibold mb-1">Comptes de démonstration :</p>
-            <p>admin@eventtix.test / organizer@eventtix.test / user@eventtix.test — mot de passe : password</p>
-        </div>
+    <div class="mt-4 rounded-3xl bg-peach/80 p-5 text-xs leading-relaxed text-ink/70">
+        <p class="font-semibold text-ink/80">Comptes de démonstration</p>
+        <p class="mt-1">admin@eventtix.test · organizer@eventtix.test · user@eventtix.test</p>
+        <p class="mt-0.5">Mot de passe : <span class="font-mono font-semibold text-ink/80">password</span></p>
     </div>
 </div>
 @endsection

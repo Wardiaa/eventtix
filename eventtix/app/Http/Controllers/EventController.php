@@ -10,7 +10,7 @@ class EventController extends Controller
     public function index(Request $request)
     {
         $events = Event::published()
-            ->with('ticketTypes')
+            ->with(['ticketTypes', 'organizer'])
             ->search($request->string('q'))
             ->when($request->filled('category'), fn ($q) => $q->where('category', $request->category))
             ->when($request->filled('location'), fn ($q) => $q->where('location', 'like', '%'.$request->location.'%'))

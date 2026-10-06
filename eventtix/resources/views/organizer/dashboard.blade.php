@@ -1,60 +1,140 @@
 @extends('layouts.app')
-@section('title', 'Tableau de bord organisateur')
+
+@section('title', 'Studio organisateur')
+
 @section('content')
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-    <div class="flex items-center justify-between mb-8">
-        <h1 class="text-2xl font-bold text-gray-900">Tableau de bord</h1>
-        <a href="{{ route('organizer.events.create') }}" class="bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition">+ Nouvel événement</a>
+@php
+    $chartMax = max(1, $salesChart->max('sold'));
+@endphp
+
+<div class="pb-8">
+    <!-- Header -->
+    <div>
+        <p class="eyebrow">Studio organisateur</p>
+        <h1 class="page-title mt-3">Pilotez vos événements.</h1>
+        <p class="page-subtitle">Une vue claire pour créer, vendre et faire grandir vos expériences.</p>
     </div>
 
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
-        <div class="bg-white rounded-2xl border border-gray-100 p-5">
-            <p class="text-xs text-gray-400">Événements</p>
-            <p class="text-2xl font-extrabold text-gray-900">{{ $stats['total_events'] }}</p>
+    <!-- KPIs -->
+    <div class="mt-10 grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5">
+        <div class="card p-5 sm:p-6">
+            <p class="label-micro !mb-0">Billets vendus</p>
+            <p class="mt-3 font-display text-3xl font-bold tracking-tight text-ink tnum">{{ number_format($stats['total_tickets_sold'], 0, ',', ' ') }}</p>
+            <p class="mt-2 text-xs font-medium text-coral-600 tnum">+{{ $stats['tickets_last_week'] }} cette semaine</p>
         </div>
-        <div class="bg-white rounded-2xl border border-gray-100 p-5">
-            <p class="text-xs text-gray-400">Publiés</p>
-            <p class="text-2xl font-extrabold text-gray-900">{{ $stats['published_events'] }}</p>
+
+        <div class="card p-5 sm:p-6">
+            <p class="label-micro !mb-0">Revenus</p>
+            <p class="mt-3 font-display text-3xl font-bold tracking-tight text-ink tnum">
+                {{ number_format($stats['total_revenue'], 0, ',', ' ') }}<span class="ml-1 text-sm font-semibold text-stone-400">DA</span>
+            </p>
+            <p class="mt-2 text-xs font-medium text-coral-600 tnum">+{{ number_format($stats['revenue_last_week'], 0, ',', ' ') }} DA cette semaine</p>
         </div>
-        <div class="bg-white rounded-2xl border border-gray-100 p-5">
-            <p class="text-xs text-gray-400">Billets vendus</p>
-            <p class="text-2xl font-extrabold text-gray-900">{{ $stats['total_tickets_sold'] }}</p>
+
+        <div class="card p-5 sm:p-6">
+            <p class="label-micro !mb-0">Événements actifs</p>
+            <p class="mt-3 font-display text-3xl font-bold tracking-tight text-ink tnum">{{ str_pad($stats['published_events'], 2, '0', STR_PAD_LEFT) }}</p>
+            <p class="mt-2 text-xs font-medium text-coral-600 tnum">{{ $stats['upcoming_events'] }} à venir</p>
         </div>
-        <div class="bg-white rounded-2xl border border-gray-100 p-5">
-            <p class="text-xs text-gray-400">Revenu total</p>
-            <p class="text-2xl font-extrabold text-brand-600">{{ number_format($stats['total_revenue'], 0, ',', ' ') }} DA</p>
+
+        <div class="card p-5 sm:p-6">
+            <p class="label-micro !mb-0">Taux de remplissage</p>
+            <p class="mt-3 font-display text-3xl font-bold tracking-tight text-ink tnum">{{ $stats['fill_rate'] }}%</p>
+            <p class="mt-2 text-xs font-medium text-coral-600">{{ $stats['total_events'] }} événement(s) au total</p>
         </div>
     </div>
 
-    <div class="flex flex-wrap gap-3 mb-10">
-        <a href="{{ route('organizer.events.index') }}" class="text-sm font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-xl transition">Gérer mes événements</a>
-        <a href="{{ route('organizer.validate.show') }}" class="text-sm font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 px-4 py-2 rounded-xl transition">Valider un billet à l'entrée</a>
+    <!-- Chart + quick action -->
+    <div class="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div class="card p-6 lg:col-span-2 sm:p-7">
+            <div class="flex items-center justify-between gap-4">
+                <h2 class="font-display text-lg font-bold tracking-tight text-ink">Performance des ventes</h2>
+                <span class="text-xs font-medium text-stone-400">30 derniers jours</span>
+            </div>
+
+            <div class="mt-7 flex h-52 items-end gap-1.5">
+                @foreach($salesChart as $point)
+                    @php $height = $point['sold'] > 0 ? max(6, round($point['sold'] / $chartMax * 100)) : 4; @endphp
+                    <div class="group flex h-full flex-1 items-end" title="{{ $point['label'] }} — {{ $point['sold'] }} billet(s)">
+                        <div class="w-full rounded-t-md transition-all duration-300 {{ $point['sold'] > 0 ? 'bg-coral-400 group-hover:bg-coral-500' : 'bg-coral-400/25' }}"
+                            style="height: {{ $height }}%"></div>
+                    </div>
+                @endforeach
+            </div>
+
+            <div class="mt-3 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-stone-400">
+                <span>{{ $salesChart->first()['date'] }}</span>
+                <span>{{ $salesChart->last()['date'] }}</span>
+            </div>
+        </div>
+
+        <div class="flex flex-col justify-between rounded-3xl bg-peach p-6 shadow-soft sm:p-7">
+            <div>
+                <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink/50">Action rapide</p>
+                <h2 class="mt-4 font-display text-2xl font-bold leading-snug tracking-tight text-ink">Créez votre prochain événement.</h2>
+                <p class="mt-3 text-xs leading-relaxed text-ink/60">
+                    Mettez votre prochaine date en ligne en quelques minutes.
+                </p>
+            </div>
+            <div class="mt-7 space-y-2.5">
+                <a href="{{ route('organizer.events.create') }}" class="btn-dark w-full">
+                    Commencer
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 17 17 7m0 0H8m9 0v9" />
+                    </svg>
+                </a>
+                <a href="{{ route('organizer.validate.show') }}" class="block w-full py-1 text-center text-xs font-semibold text-ink/60 transition-colors hover:text-ink">
+                    Contrôle d'accès ↗
+                </a>
+            </div>
+        </div>
     </div>
 
-    <h2 class="font-bold text-gray-900 mb-4">Dernières réservations</h2>
-    <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50 text-gray-400 text-xs uppercase">
-                <tr>
-                    <th class="text-left px-5 py-3">Participant</th>
-                    <th class="text-left px-5 py-3">Événement</th>
-                    <th class="text-left px-5 py-3">Billet</th>
-                    <th class="text-left px-5 py-3">Montant</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-50">
-                @forelse($recentBookings as $b)
+    <!-- Recent bookings -->
+    <div class="card mt-6 overflow-hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 p-6 pb-4 sm:px-7">
+            <h2 class="font-display text-lg font-bold tracking-tight text-ink">Dernières réservations</h2>
+            <a href="{{ route('organizer.events.index') }}" class="flex items-center gap-1.5 text-xs font-semibold text-coral-600 transition-colors hover:text-coral-500">
+                Gérer mes événements
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M7 17 17 7m0 0H8m9 0v9" />
+                </svg>
+            </a>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="border-y border-stone-100 bg-cream/60">
                     <tr>
-                        <td class="px-5 py-3 font-medium text-gray-800">{{ $b->user->name }}</td>
-                        <td class="px-5 py-3 text-gray-500">{{ $b->event->title }}</td>
-                        <td class="px-5 py-3 text-gray-500">{{ $b->ticketType->name }} × {{ $b->quantity }}</td>
-                        <td class="px-5 py-3 font-semibold text-gray-800">{{ number_format($b->total_price, 0, ',', ' ') }} DA</td>
+                        <th class="table-th">Participant</th>
+                        <th class="table-th">Événement</th>
+                        <th class="table-th">Billet</th>
+                        <th class="table-th text-right">Montant</th>
                     </tr>
-                @empty
-                    <tr><td colspan="4" class="px-5 py-8 text-center text-gray-400">Aucune réservation pour le moment.</td></tr>
-                @endforelse
-            </tbody>
-        </table>
+                </thead>
+                <tbody class="divide-y divide-stone-100">
+                    @forelse($recentBookings as $b)
+                        <tr class="transition-colors hover:bg-cream/60">
+                            <td class="px-5 py-4">
+                                <div class="flex items-center gap-3">
+                                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-peach text-[11px] font-bold text-ink">
+                                        {{ strtoupper(mb_substr($b->user->name, 0, 1)) }}
+                                    </span>
+                                    <span class="font-semibold text-ink">{{ $b->user->name }}</span>
+                                </div>
+                            </td>
+                            <td class="px-5 py-4 text-stone-500">{{ $b->event->title }}</td>
+                            <td class="px-5 py-4 text-stone-500">{{ $b->ticketType->name }} × {{ $b->quantity }}</td>
+                            <td class="px-5 py-4 text-right font-semibold text-ink tnum">{{ number_format($b->total_price, 0, ',', ' ') }} DA</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="4" class="px-5 py-10 text-center text-sm text-stone-400">Aucune réservation pour le moment.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 @endsection

@@ -2,59 +2,66 @@
 @if(isset($event)) @method('PUT') @endif
 
 @if($errors->any())
-    <div class="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3 mb-4">
-        <ul class="list-disc pl-4">
+    <div class="mb-6 rounded-2xl border border-red-200/70 bg-red-50/90 p-4 text-sm text-red-900">
+        <ul class="list-disc space-y-0.5 pl-4">
             @foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach
         </ul>
     </div>
 @endif
 
-<div class="grid sm:grid-cols-2 gap-5">
+<div class="grid gap-5 sm:grid-cols-2">
     <div class="sm:col-span-2">
-        <label class="text-sm font-medium text-gray-700">Titre de l'événement</label>
-        <input type="text" name="title" value="{{ old('title', $event->title ?? '') }}" required class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">
-    </div>
-    <div class="sm:col-span-2">
-        <label class="text-sm font-medium text-gray-700">Description</label>
-        <textarea name="description" rows="5" required class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">{{ old('description', $event->description ?? '') }}</textarea>
-    </div>
-    <div>
-        <label class="text-sm font-medium text-gray-700">Catégorie</label>
-        <input type="text" name="category" value="{{ old('category', $event->category ?? '') }}" required placeholder="Technologie, Musique, Business..." class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">
-    </div>
-    <div>
-        <label class="text-sm font-medium text-gray-700">Lieu</label>
-        <input type="text" name="location" value="{{ old('location', $event->location ?? '') }}" required class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">
+        <label class="label-micro !text-stone-500" for="ev-title">Titre de l'événement</label>
+        <input id="ev-title" type="text" name="title" value="{{ old('title', $event->title ?? '') }}" required class="input" placeholder="Ex : Nuits Sonores — Édition d'été">
     </div>
     <div class="sm:col-span-2">
-        <label class="text-sm font-medium text-gray-700">Détails du lieu (optionnel)</label>
-        <textarea name="venue_details" rows="2" class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">{{ old('venue_details', $event->venue_details ?? '') }}</textarea>
+        <label class="label-micro !text-stone-500" for="ev-description">Description</label>
+        <textarea id="ev-description" name="description" rows="5" required class="input" placeholder="Présentez le programme, les artistes, les informations pratiques…">{{ old('description', $event->description ?? '') }}</textarea>
     </div>
     <div>
-        <label class="text-sm font-medium text-gray-700">Date et heure de début</label>
-        <input type="datetime-local" name="start_date" value="{{ old('start_date', isset($event) ? $event->start_date->format('Y-m-d\TH:i') : '') }}" required class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">
+        <label class="label-micro !text-stone-500" for="ev-category">Catégorie</label>
+        <input id="ev-category" type="text" name="category" value="{{ old('category', $event->category ?? '') }}" required placeholder="Concert, Conférence, Sport…" class="input">
     </div>
     <div>
-        <label class="text-sm font-medium text-gray-700">Date et heure de fin</label>
-        <input type="datetime-local" name="end_date" value="{{ old('end_date', isset($event) ? $event->end_date->format('Y-m-d\TH:i') : '') }}" required class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">
+        <label class="label-micro !text-stone-500" for="ev-location">Lieu</label>
+        <input id="ev-location" type="text" name="location" value="{{ old('location', $event->location ?? '') }}" required class="input" placeholder="Alger, Oran, Constantine…">
+    </div>
+    <div class="sm:col-span-2">
+        <label class="label-micro !text-stone-500" for="ev-venue">Détails du lieu (optionnel)</label>
+        <textarea id="ev-venue" name="venue_details" rows="2" class="input" placeholder="Salle, adresse précise, accès…">{{ old('venue_details', $event->venue_details ?? '') }}</textarea>
     </div>
     <div>
-        <label class="text-sm font-medium text-gray-700">Capacité totale</label>
-        <input type="number" name="capacity" min="1" value="{{ old('capacity', $event->capacity ?? '') }}" required class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">
+        <label class="label-micro !text-stone-500" for="ev-start">Début</label>
+        <input id="ev-start" type="datetime-local" name="start_date" value="{{ old('start_date', isset($event) ? $event->start_date->format('Y-m-d\TH:i') : '') }}" required class="input tnum">
     </div>
     <div>
-        <label class="text-sm font-medium text-gray-700">Statut</label>
-        <select name="status" class="mt-1 w-full rounded-lg border-gray-200 focus:ring-brand-500 focus:border-brand-500 text-sm">
+        <label class="label-micro !text-stone-500" for="ev-end">Fin</label>
+        <input id="ev-end" type="datetime-local" name="end_date" value="{{ old('end_date', isset($event) ? $event->end_date->format('Y-m-d\TH:i') : '') }}" required class="input tnum">
+    </div>
+    <div>
+        <label class="label-micro !text-stone-500" for="ev-capacity">Capacité totale</label>
+        <input id="ev-capacity" type="number" name="capacity" min="1" value="{{ old('capacity', $event->capacity ?? '') }}" required class="input tnum">
+    </div>
+    <div>
+        <label class="label-micro !text-stone-500" for="ev-status">Statut</label>
+        <select id="ev-status" name="status" class="input cursor-pointer">
             <option value="draft" @selected(old('status', $event->status ?? 'draft') === 'draft')>Brouillon</option>
             <option value="published" @selected(old('status', $event->status ?? '') === 'published')>Publié</option>
         </select>
     </div>
     <div class="sm:col-span-2">
-        <label class="text-sm font-medium text-gray-700">Image de couverture (optionnel)</label>
-        <input type="file" name="cover_image" accept="image/*" class="mt-1 w-full text-sm">
+        <label class="label-micro !text-stone-500" for="ev-cover">Image de couverture (optionnel)</label>
+        <input id="ev-cover" type="file" name="cover_image" accept="image/*"
+            class="block w-full cursor-pointer text-sm text-stone-500 file:mr-4 file:cursor-pointer file:rounded-xl file:border-0 file:bg-ink file:px-4 file:py-2.5 file:text-xs file:font-semibold file:text-paper file:transition-colors hover:file:bg-ink-700">
+        @if(isset($event) && $event->cover_image)
+            <p class="mt-2 text-xs text-stone-400">Une couverture est déjà en ligne — laissez vide pour la conserver.</p>
+        @endif
     </div>
 </div>
 
-<button class="mt-6 bg-brand-500 hover:bg-brand-600 text-white font-semibold px-6 py-3 rounded-xl transition">
-    {{ isset($event) ? 'Mettre à jour l\'événement' : 'Créer l\'événement' }}
+<button type="submit" class="btn-dark mt-8 w-full sm:w-auto">
+    {{ isset($event) ? "Mettre à jour l'événement" : "Créer l'événement" }}
+    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M7 17 17 7m0 0H8m9 0v9" />
+    </svg>
 </button>
