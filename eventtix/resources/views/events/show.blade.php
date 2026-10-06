@@ -14,9 +14,7 @@
 
     <!-- Hero banner -->
     <div class="relative mt-5 h-[280px] overflow-hidden rounded-[28px] bg-stone-100 sm:h-[380px]">
-        @if($event->cover_image)
-            <img src="{{ asset('storage/'.$event->cover_image) }}" class="h-full w-full object-cover" alt="{{ $event->title }}">
-        @endif
+        <img src="{{ $event->coverUrl() }}" class="h-full w-full object-cover" alt="{{ $event->title }}">
         <div class="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/20 to-transparent"></div>
 
         <div class="absolute bottom-6 left-6 right-6 sm:bottom-8 sm:left-8 sm:right-8">

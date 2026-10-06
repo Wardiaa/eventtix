@@ -47,6 +47,29 @@ class Event extends Model
         return 'slug';
     }
 
+    private const COVER_POOL = [
+        'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=85',
+        'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=1200&q=85',
+        'https://images.unsplash.com/photo-1561214115-f2f134cc4912?auto=format&fit=crop&w=1200&q=85',
+    ];
+
+    private const CATEGORY_COVERS = [
+        'Technologie' => 0,
+        'Musique' => 1,
+        'Business' => 2,
+    ];
+
+    public function coverUrl(): string
+    {
+        if ($this->cover_image) {
+            return Str::startsWith($this->cover_image, ['http://', 'https://'])
+                ? $this->cover_image
+                : asset('storage/'.$this->cover_image);
+        }
+
+        return self::COVER_POOL[self::CATEGORY_COVERS[$this->category] ?? abs(crc32((string) $this->slug)) % count(self::COVER_POOL)];
+    }
+
     public function organizer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'organizer_id');

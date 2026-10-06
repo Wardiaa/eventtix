@@ -11,16 +11,16 @@
 <div class="space-y-16">
     <!-- Hero -->
     <section class="pt-2 lg:pt-6">
-        <div class="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
+        <div class="flex flex-col gap-8 2xl:flex-row 2xl:items-end 2xl:justify-between">
             <div class="max-w-3xl">
                 <p class="eyebrow">{{ $prenom ? $greeting.', '.$prenom : 'Billetterie culturelle & événements pro — Algérie' }}</p>
-                <h1 class="mt-5 font-display text-4xl font-bold leading-[1.04] tracking-[-0.03em] text-ink sm:text-5xl lg:text-6xl xl:text-[64px]">
-                    Trouvez votre prochain<br class="hidden sm:block">
-                    <span class="text-stone-400">moment</span> inoubliable<span class="text-coral-500">.</span>
+                <h1 class="mt-5 font-display text-[1.75rem] font-bold leading-[1.06] tracking-[-0.025em] text-ink sm:text-4xl md:text-5xl xl:text-6xl">
+                    <span class="block">Trouvez votre prochain</span>
+                    <span class="block"><span class="text-stone-400">moment</span> inoubliable<span class="text-coral-500">.</span></span>
                 </h1>
             </div>
 
-            <form action="{{ route('events.index') }}" method="GET" class="w-full shrink-0 xl:w-[400px]">
+            <form action="{{ route('events.index') }}" method="GET" class="w-full shrink-0 sm:max-w-lg 2xl:w-[400px]">
                 <label for="hero-search" class="sr-only">Rechercher un événement</label>
                 <div class="flex items-center gap-2 rounded-full border border-stone-200/80 bg-white py-1.5 pl-5 pr-1.5 shadow-soft transition-shadow duration-200 focus-within:shadow-lift">
                     <svg class="h-4 w-4 shrink-0 text-stone-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">

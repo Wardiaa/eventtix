@@ -1,35 +1,25 @@
 @props(['event'])
 
-<article class="group relative flex flex-col overflow-hidden rounded-3xl border border-stone-200/70 bg-white shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lift"
+<article class="group relative flex flex-col overflow-hidden rounded-[22px] bg-white shadow-[0_10px_35px_rgba(30,25,20,0.055)] transition-transform hover:-translate-y-1"
     x-data="favorite({{ $event->id }})">
     <a href="{{ route('events.show', $event) }}" class="absolute inset-0 z-10" aria-label="Voir {{ $event->title }}"></a>
 
-    <div class="relative p-2.5 pb-0">
-        <div class="relative aspect-[16/11] overflow-hidden rounded-[18px] bg-stone-100">
-            @if($event->cover_image)
-                <img src="{{ asset('storage/'.$event->cover_image) }}" alt="{{ $event->title }}"
-                    class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]">
-            @else
-                <div class="flex h-full w-full items-center justify-center bg-peach">
-                    <svg class="h-10 w-10 text-ink/20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 0 0-2 2v3a2 2 0 1 1 0 4v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 1 1 0-4V7a2 2 0 0 0-2-2H5z" />
-                    </svg>
-                </div>
-            @endif
+    <div class="relative h-[195px] overflow-hidden">
+        <img src="{{ $event->coverUrl() }}" alt="{{ $event->title }}" loading="lazy"
+            class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105">
 
-            @if($event->isSoldOut())
-                <div class="absolute inset-0 flex items-center justify-center bg-ink/55">
-                    <span class="rounded-full bg-white px-4 py-1.5 text-xs font-bold text-ink">Complet</span>
-                </div>
-            @endif
+        @if($event->isSoldOut())
+            <div class="absolute inset-0 flex items-center justify-center bg-ink/55">
+                <span class="rounded-full bg-white px-4 py-1.5 text-xs font-bold text-ink">Complet</span>
+            </div>
+        @endif
 
-            <span class="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-ink backdrop-blur-sm">
-                {{ $event->category }}
-            </span>
-        </div>
+        <span class="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-ink backdrop-blur-sm">
+            {{ $event->category }}
+        </span>
 
         <button type="button" @click.stop="toggle()"
-            class="absolute right-5 top-5 z-20 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/95 shadow-soft transition-transform duration-150 hover:scale-110"
+            class="absolute right-3 top-3 z-20 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/95 shadow-soft transition-transform duration-150 hover:scale-110"
             :aria-label="on ? 'Retirer des favoris' : 'Ajouter aux favoris'">
             <svg class="h-4 w-4 transition-colors duration-150" :class="on ? 'fill-coral-500 stroke-coral-500' : 'fill-none stroke-ink'" stroke-width="1.7" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
@@ -37,7 +27,7 @@
         </button>
     </div>
 
-    <div class="flex flex-1 flex-col p-4 pt-3.5">
+    <div class="flex flex-1 flex-col px-5 pb-5 pt-4">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
                 <h3 class="truncate text-lg font-bold tracking-tight text-ink">{{ $event->title }}</h3>
