@@ -18,4 +18,4 @@ RUN mkdir -p bootstrap/cache storage/framework/sessions storage/framework/views 
 RUN composer install --no-dev --optimize-autoloader
 
 EXPOSE 9000
-CMD php artisan tinker --execute="echo 'URL='.env('DATABASE_URL').PHP_EOL; echo 'CONN='.env('DB_CONNECTION').PHP_EOL; echo 'HOST='.env('DB_HOST').PHP_EOL; echo 'DBNAME='.env('DB_DATABASE').PHP_EOL; echo 'PORT='.env('DB_PORT').PHP_EOL;" && php artisan serve --host=0.0.0.0 --port=$PORT
+CMD php artisan config:clear && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=$PORT
