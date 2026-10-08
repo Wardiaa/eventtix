@@ -22,4 +22,4 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 
 # Expose port and start PHP-FPM
 EXPOSE 9000
-CMD ["php-fpm"]
+CMD php artisan config:clear && php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=$PORT
