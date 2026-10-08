@@ -1,11 +1,10 @@
 services:
   - type: web
     name: eventtix
-    runtime: php
-    buildCommand: |
-      composer install --no-dev --optimize-autoloader
-      php artisan migrate --force
-    startCommand: php artisan serve --host=0.0.0.0 --port=$PORT
+    runtime: docker
+    rootDir: eventtix
+    dockerfilePath: ./Dockerfile
+    startCommand: bash scripts/start.sh
     envVars:
       - key: APP_ENV
         value: production
@@ -19,5 +18,7 @@ services:
         sync: false
       - key: SESSION_DRIVER
         value: database
-      - key: CACHE_STORE
-        value: database
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: FILESYSTEM_DISK
+        value: local
