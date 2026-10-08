@@ -12,26 +12,34 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $admin = User::create([
-            'name' => 'Admin EventTix',
-            'email' => 'admin@eventtix.test',
-            'password' => Hash::make('password'),
-            'role' => 'admin',
-        ]);
+        // Create users idempotently — firstOrCreate matches on email,
+        // so running this seeder twice will not create duplicate accounts.
+        $admin = User::firstOrCreate(
+            ['email' => 'admin@eventtix.test'],
+            [
+                'name' => 'Admin EventTix',
+                'password' => Hash::make('password'),
+                'role' => 'admin',
+            ]
+        );
 
-        $organizer = User::create([
-            'name' => 'Yanis Organisateur',
-            'email' => 'organizer@eventtix.test',
-            'password' => Hash::make('password'),
-            'role' => 'organizer',
-        ]);
+        $organizer = User::firstOrCreate(
+            ['email' => 'organizer@eventtix.test'],
+            [
+                'name' => 'Yanis Organisateur',
+                'password' => Hash::make('password'),
+                'role' => 'organizer',
+            ]
+        );
 
-        $user = User::create([
-            'name' => 'Amel Participante',
-            'email' => 'user@eventtix.test',
-            'password' => Hash::make('password'),
-            'role' => 'user',
-        ]);
+        $user = User::firstOrCreate(
+            ['email' => 'user@eventtix.test'],
+            [
+                'name' => 'Amel Participante',
+                'password' => Hash::make('password'),
+                'role' => 'user',
+            ]
+        );
 
         $events = [
             [
@@ -76,14 +84,33 @@ class DatabaseSeeder extends Seeder
             ],
         ];
 
-        foreach ($events as $e) {
-            $ticketTypes = $e['tickets'];
-            unset($e['tickets']);
+        foreach ($events as $eventData) {
+            // Pull ticket types out before creating the event
+            $ticketTypes = $eventData['tickets'];
+            unset($eventData['tickets']);
 
-            $event = Event::create($e + ['organizer_id' => $organizer->id, 'status' => 'published']);
+            // Idempotent event creation: match on title + organizer.
+            $event = Event::firstOrCreate(
+                [
+                    'title' => $eventData['title'],
+                    'organizer_id' => $organizer->id,
+                ],
+                $eventData + ['status' => 'published']
+            );
 
+            // For each ticket type, create only if it doesn't already exist
+            // for this event (matched by name).
             foreach ($ticketTypes as $tt) {
-                TicketType::create($tt + ['event_id' => $event->id]);
+                TicketType::firstOrCreate(
+                    [
+                        'event_id' => $event->id,
+                        'name' => $tt['name'],
+                    ],
+                    [
+                        'price' => $tt['price'],
+                        'quantity' => $tt['quantity'],
+                    ]
+                );
             }
         }
 
