@@ -18,4 +18,4 @@ RUN mkdir -p bootstrap/cache storage/framework/sessions storage/framework/views 
 RUN composer install --no-dev --optimize-autoloader
 
 EXPOSE 9000
-CMD php artisan tinker --execute="echo 'URL='.env('DATABASE_URL').PHP_EOL; echo 'CONFIGURL='.config('database.connections.pgsql.url').PHP_EOL; echo 'CONFIGHOST='.config('database.connections.pgsql.host').PHP_EOL; echo 'DEFAULT='.config('database.default').PHP_EOL; DB::connection()->getPdo(); echo 'DB OK'.PHP_EOL;" ; php artisan serve --host=0.0.0.0 --port=$PORT
+CMD php artisan config:clear; php artisan migrate --force; php artisan serve --host=0.0.0.0 --port=$PORT
