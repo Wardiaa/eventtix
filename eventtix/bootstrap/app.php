@@ -13,6 +13,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Render terminates HTTPS at its edge proxy and forwards requests over
+        // HTTP. Without trusting the proxy, Laravel generates http:// URLs for
+        // form actions while the page is https://, triggering the browser's
+        // "insecure form submission" warning.
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'role' => EnsureUserHasRole::class,
         ]);
