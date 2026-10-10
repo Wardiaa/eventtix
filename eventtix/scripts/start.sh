@@ -10,5 +10,8 @@ php artisan config:cache
 echo "Caching routes..."
 php artisan route:cache
 
+echo "Starting scheduler in background..."
+php artisan schedule:work &
+
 echo "Starting server..."
 php artisan serve --host=0.0.0.0 --port=$PORT
